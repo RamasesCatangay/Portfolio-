@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your Name – Portfolio Quest 3D</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#bfe6ff;--ink:#2a1f3d;--panel:#fffdf4;--accent:#ffb400;--line:#2a1f3d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1530;--ink:#f1ead6;--panel:#2a1f3d;--line:#f1ead6}}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font-family:"Press Start 2P",ui-monospace,Menlo,monospace;font-size:10px;line-height:1.8}
+#root{position:fixed;inset:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.ui{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 10px 0;pointer-events:none;display:flex;flex-direction:column;gap:8px;max-width:440px}
+.box{border:3px solid var(--line);background:var(--panel);box-shadow:4px 4px 0 var(--line);padding:10px}
+h1{font-size:12px;margin:0;line-height:1.5}
+.sub{margin:0;opacity:.8;font-size:9px}
+.hud{display:flex;align-items:center;gap:8px;margin-top:6px}
+.bar{flex:1;height:12px;border:3px solid var(--line);background:var(--panel)}
+.bar i{display:block;height:100%;background:var(--accent);transition:width .4s}
+.dlg{pointer-events:auto;max-height:42vh;overflow-y:auto}
+.dlg h2{font-size:11px;margin:0 0 8px}
+.dlg p{margin:0 0 8px}
+.dlg ul{margin:0;padding-left:16px}.dlg li{margin-bottom:8px}
+.dlg a{color:inherit;text-underline-offset:3px}
+.tag{display:inline-block;border:2px solid var(--line);padding:0 6px;margin:0 4px 6px 0;font-size:9px}
+.pad{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,58px);gap:6px}
+.pad button{font:inherit;font-size:18px;border:3px solid var(--line);background:var(--accent);color:#2a1f3d;box-shadow:3px 3px 0 var(--line);touch-action:none;user-select:none;-webkit-user-select:none}
+.pad .u{grid-column:2}.pad .l{grid-row:2;grid-column:1}.pad .d{grid-row:2;grid-column:2}.pad .r{grid-row:2;grid-column:3}
+.pad button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--line)}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.hint{position:absolute;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);font-size:8px;opacity:.7;text-align:right;display:none}
+@media(min-width:700px){.hint{display:block}.pad{left:14px;transform:none}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const {useState,useEffect,useRef}=React;const h=React.createElement;
+// Edit everything here to make it yours
+const ME={name:"Your Name",role:"Full-stack developer & designer"};
+const SPOTS=[
+{id:"about",e:"🏠",x:-11,z:-11,title:"About House",body:[["p","Hi, I’m Your Name. I build friendly, fast web apps and care about the details people feel but don’t notice."],["p","Based in Your City. Off the clock: coffee, hiking and retro games."]]},
+{id:"skills",e:"🗼",x:11,z:-11,title:"Skill Tower",body:[["tags",["React","JavaScript","TypeScript","Node.js","CSS","Figma","SQL","Git"]],["p","Level 5 in shipping things that work on a phone first."]]},
+{id:"projects",e:"🕹️",x:-11,z:11,title:"Project Arcade",body:[["list",["Project One – a habit tracker used by 2,000 people.","Project Two – an open-source UI kit with 500 stars.","Project Three – a tiny game built in a weekend."]]]},
+{id:"contact",e:"📮",x:11,z:11,title:"Contact Mailbox",body:[["p","Want to work together? Send a message."],["link","you@example.com","mailto:you@example.com"],["link","github.com/yourname","https://github.com/yourname"],["link","linkedin.com/in/yourname","https://linkedin.com/in/yourname"]]}
+];
+function Body({b}){return b.map((x,i)=>{
+ if(x[0]==="p")return h("p",{key:i},x[1]);
+ if(x[0]==="tags")return h("div",{key:i},x[1].map(t=>h("span",{className:"tag",key:t},t)));
+ if(x[0]==="list")return h("ul",{key:i},x[1].map(t=>h("li",{key:t},t)));
+ return h("p",{key:i},h("a",{href:x[2],target:"_blank",rel:"noopener"},x[1]));});}
+
+const input={u:0,d:0,l:0,r:0};
+const KEYS={ArrowUp:"u",w:"u",ArrowDown:"d",s:"d",ArrowLeft:"l",a:"l",ArrowRight:"r",d:"r"};
+
+function build(mount,onNear,onSeen){
+ const dark=matchMedia("(prefers-color-scheme: dark)").matches;
+ const T=THREE,M=(c)=>new T.MeshLambertMaterial({color:c});
+ const scene=new T.Scene();scene.background=new T.Color(dark?0x1d1530:0xbfe6ff);scene.fog=new T.Fog(scene.background,28,60);
+ const cam=new T.PerspectiveCamera(50,1,.1,100);
+ const ren=new T.WebGLRenderer({antialias:true});ren.setPixelRatio(Math.min(devicePixelRatio,2));mount.appendChild(ren.domElement);
+ scene.add(new T.HemisphereLight(0xffffff,dark?0x332244:0x88aa66,dark?.55:.85));
+ const sun=new T.DirectionalLight(0xfff2cc,dark?.5:.8);sun.position.set(8,16,6);scene.add(sun);
+ const add=(g,m,x,y,z,p)=>{const o=new T.Mesh(g,m);o.position.set(x,y,z);(p||scene).add(o);return o;};
+ const ground=add(new T.PlaneGeometry(64,64),M(dark?0x3f6b34:0x8cc46a),0,0,0);ground.rotation.x=-Math.PI/2;
+ const grid=new T.GridHelper(64,32,0x000000,0x000000);grid.material.transparent=true;grid.material.opacity=.07;scene.add(grid);
+ // buildings
+ const items=[];const rings=[];const sprites=[];
+ SPOTS.forEach((s,i)=>{
+  const g=new T.Group();g.position.set(s.x,0,s.z);scene.add(g);
+  if(i===0){add(new T.BoxGeometry(4.4,3,4),M(0xf4d58d),0,1.5,0,g);const r=add(new T.ConeGeometry(3.7,2.2,4),M(0x7b5ea7),0,4.1,0,g);r.rotation.y=Math.PI/4;add(new T.BoxGeometry(1,1.8,.2),M(0x6b4a2f),0,.9,2.05,g);}
+  if(i===1){add(new T.CylinderGeometry(1.6,2,8,8),M(0x9bd1e5),0,4,0,g);add(new T.ConeGeometry(2.3,3,8),M(0xffb400),0,9.5,0,g);add(new T.BoxGeometry(.9,1.2,.2),M(0x2a1f3d),0,5.5,1.7,g);}
+  if(i===2){add(new T.BoxGeometry(5,3.6,3),M(0x2a1f3d),0,1.8,0,g);add(new T.BoxGeometry(5.4,.7,3.4),M(0xff5d8f),0,3.9,0,g);add(new T.BoxGeometry(3.2,1.8,.1),new T.MeshBasicMaterial({color:0x7cffb2}),0,2,1.55,g);}
+  if(i===3){add(new T.CylinderGeometry(.2,.2,2.6,8),M(0x6b4a2f),0,1.3,0,g);add(new T.BoxGeometry(2,1.3,1.2),M(0x3b82f6),0,3,0,g);add(new T.BoxGeometry(.1,.9,.5),M(0xff5d5d),1.1,3.4,0,g);}
+  const ring=add(new T.RingGeometry(3.6,4.2,40),new T.MeshBasicMaterial({color:0xffb400,transparent:true,opacity:.9,side:T.DoubleSide}),0,.06,0,g);ring.rotation.x=-Math.PI/2;rings.push(ring);
+  const c=document.createElement("canvas");c.width=c.height=128;const x=c.getContext("2d");x.font="90px serif";x.textAlign="center";x.textBaseline="middle";x.fillText(s.e,64,70);
+  const sp=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(c),depthTest:false}));sp.scale.set(2.6,2.6,1);sp.position.y=i===1?12.5:6.2;g.add(sp);sprites.push(sp);
+  items.push({x:s.x,z:s.z,r:3});
+ });
+ // trees
+ let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+ const trees=[];
+ for(let n=0;n<45;n++){const x=(rnd()-.5)*58,z=(rnd()-.5)*58;
+  if(Math.hypot(x,z)<6||SPOTS.some(s=>Math.hypot(x-s.x,z-s.z)<7))continue;
+  const g=new T.Group();g.position.set(x,0,z);const k=.8+rnd()*.7;g.scale.set(k,k,k);scene.add(g);
+  add(new T.CylinderGeometry(.25,.3,1.2,6),M(0x6b4a2f),0,.6,0,g);
+  add(new T.ConeGeometry(1.2,2.4,7),M(dark?0x2b5a2c:0x3f7d3a),0,2.2,0,g);add(new T.ConeGeometry(.9,1.8,7),M(dark?0x336a34:0x4f9548),0,3.4,0,g);
+  trees.push({x,z,r:.9*k});}
+ // player
+ const me=new T.Group();scene.add(me);
+ const body=add(new T.BoxGeometry(.9,1,.6),M(0xff5d8f),0,1,0,me);
+ add(new T.BoxGeometry(.8,.8,.8),M(0xffd9b3),0,1.9,0,me);add(new T.BoxGeometry(.9,.3,.9),M(0x2a1f3d),0,2.4,0,me);
+ const legL=add(new T.BoxGeometry(.3,.6,.35),M(0x2a1f3d),-.22,.3,0,me),legR=add(new T.BoxGeometry(.3,.6,.35),M(0x2a1f3d),.22,.3,0,me);
+ const shadow=add(new T.CircleGeometry(.7,16),new T.MeshBasicMaterial({color:0,transparent:true,opacity:.25}),0,.04,0,scene);shadow.rotation.x=-Math.PI/2;
+ const P={x:0,z:3,a:0,t:0};let near=-1;const seen=[];
+ const size=()=>{const w=mount.clientWidth,hh=mount.clientHeight;ren.setSize(w,hh);cam.aspect=w/hh;cam.updateProjectionMatrix();};
+ size();addEventListener("resize",size);
+ const clock=new T.Clock();let raf;
+ const loop=()=>{raf=requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.05);P.t+=dt;
+  let dx=input.r-input.l,dz=input.d-input.u;const m=Math.hypot(dx,dz);
+  if(m){dx/=m;dz/=m;const nx=P.x+dx*9*dt,nz=P.z+dz*9*dt;
+   let ok=Math.abs(nx)<29&&Math.abs(nz)<29;
+   for(const o of trees)if(Math.hypot(nx-o.x,nz-o.z)<o.r+.5)ok=false;
+   for(const o of items)if(Math.hypot(nx-o.x,nz-o.z)<2.3)ok=false;
+   if(ok){P.x=nx;P.z=nz;}
+   P.a+=(Math.atan2(dx,dz)-P.a+Math.PI*3)%(Math.PI*2)-Math.PI;
+   legL.rotation.x=Math.sin(P.t*14)*.7;legR.rotation.x=-Math.sin(P.t*14)*.7;body.position.y=1+Math.abs(Math.sin(P.t*14))*.08;
+  }else{legL.rotation.x=legR.rotation.x=0;}
+  me.position.set(P.x,0,P.z);me.rotation.y=P.a;shadow.position.set(P.x,.04,P.z);
+  cam.position.x+=(P.x-cam.position.x)*Math.min(1,dt*4);cam.position.z+=(P.z+11-cam.position.z)*Math.min(1,dt*4);cam.position.y=10;
+  cam.lookAt(cam.position.x*.6+P.x*.4,0,cam.position.z-9);
+  let n=-1;SPOTS.forEach((s,i)=>{if(Math.hypot(P.x-s.x,P.z-s.z)<4.4)n=i;
+   rings[i].scale.setScalar(1+Math.sin(P.t*3+i)*.05);sprites[i].position.y+=Math.sin(P.t*3+i)*.004;});
+  if(n!==near){near=n;onNear(n>=0?SPOTS[n].id:null);if(n>=0&&!seen.includes(n)){seen.push(n);rings[n].material.color.set(0xffffff);rings[n].material.opacity=.5;onSeen(seen.length);}}
+  ren.render(scene,cam);};
+ loop();
+ return()=>{cancelAnimationFrame(raf);removeEventListener("resize",size);ren.dispose();mount.removeChild(ren.domElement);};
+}
+
+function App(){
+ const ref=useRef(null);const [near,setNear]=useState(null);const [n,setN]=useState(0);
+ useEffect(()=>{
+  const dn=e=>{const k=KEYS[e.key]||KEYS[(e.key||"").toLowerCase()];if(k){e.preventDefault();input[k]=1;}};
+  const up=e=>{const k=KEYS[e.key]||KEYS[(e.key||"").toLowerCase()];if(k)input[k]=0;};
+  addEventListener("keydown",dn);addEventListener("keyup",up);
+  const stop=build(ref.current,setNear,setN);
+  return()=>{removeEventListener("keydown",dn);removeEventListener("keyup",up);stop();};
+ },[]);
+ const cur=SPOTS.find(s=>s.id===near);
+ return h("div",{id:"root2",style:{position:"absolute",inset:0}},
+  h("div",{ref,style:{position:"absolute",inset:0}}),
+  h("div",{className:"ui"},
+   h("div",{className:"box"},h("h1",null,ME.name),h("p",{className:"sub"},ME.role),
+    h("div",{className:"hud"},h("span",null,"XP"),h("div",{className:"bar",role:"progressbar","aria-valuemin":0,"aria-valuemax":4,"aria-valuenow":n},h("i",{style:{width:n*25+"%"}})),h("span",null,n+"/4"))),
+   h("div",{className:"box dlg","aria-live":"polite"},
+    cur?h(React.Fragment,null,h("h2",null,cur.e+" "+cur.title),h(Body,{b:cur.body}))
+    :n===4?h(React.Fragment,null,h("h2",null,"🏆 Quest complete!"),h("p",null,"You found everything. Let’s build something together: you@example.com"))
+    :h(React.Fragment,null,h("h2",null,"Start exploring"),h("p",null,"Walk to the glowing rings to visit each building. Find all 4."))) ),
+  h("div",{className:"pad"},[["u","▲"],["l","◀"],["d","▼"],["r","▶"]].map(([c,t])=>h("button",{key:c,className:c,"aria-label":"Move "+c,
+   onPointerDown:e=>{e.preventDefault();input[c]=1;},onPointerUp:()=>{input[c]=0;},onPointerLeave:()=>{input[c]=0;},onPointerCancel:()=>{input[c]=0;}},t))),
+  h("p",{className:"hint"},"Arrow keys / WASD to walk"));
+}
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+</script>
+</body>
+</html>
